@@ -96,17 +96,24 @@ if uploaded_files:
                     llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0)
                     
                     # 3. Crear el prompt final
+                    # --- BUSCAR HISTORIAL PARA EL PROMPT ---
+                    # Tomamos los últimos 3 mensajes para no saturar al modelo
+                    contexto_historial = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-3:]])
+
+                    # --- PROMPT FINAL ACTUALIZADO ---
                     prompt_final = f"""
                     Eres un profesor experto ayudando a un alumno con sus apuntes.
-                    Usa exclusivamente el CONTEXTO proporcionado para responder.
-                    Si la información no está en el contexto, dilo amablemente.
+                    A continuación tienes el historial reciente de la charla y el contexto del PDF.
 
-                    CONTEXTO:
+                    HISTORIAL RECIENTE:
+                    {contexto_historial}
+
+                    CONTEXTO DEL PDF:
                     {contexto}
 
-                    PREGUNTA: {prompt}
+                    PREGUNTA ACTUAL: {prompt}
 
-                    RESPUESTA:
+                    RESPUESTA (Basándote en el contexto y siguiendo el hilo de la charla):
                     """
                     
                     # 4. Invocar y mostrar
