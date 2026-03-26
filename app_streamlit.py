@@ -10,21 +10,17 @@ import os
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="RAG Simple", layout="wide", page_icon="📚")
 
-st.title("🤖 Consultor de Documentos (RAG Sin Memoria)")
-st.markdown("Cada pregunta se analiza de forma independiente basándose en tus archivos.")
+st.title("Consultor de Documentos")
 
 # --- SIDEBAR: CONFIGURACIÓN ---
 with st.sidebar:
-    st.header("1. Configuración")
     groq_key = st.secrets.get("GROQ_API_KEY", "")
-    if not groq_key:
-        groq_key = st.text_input("Ingresa tu Groq API Key:", type="password")
     
     st.divider()
-    st.header("2. Tus Apuntes")
+    st.header("Apuntes")
     uploaded_files = st.file_uploader("Sube uno o más PDFs", accept_multiple_files=True, type="pdf")
 
-# --- FUNCIÓN DE PROCESAMIENTO (Se mantiene igual para eficiencia) ---
+# --- FUNCIÓN DE PROCESAMIENTO  ---
 @st.cache_resource
 def crear_base_conocimiento(files):
     if not files:
@@ -80,4 +76,4 @@ if uploaded_files:
                     response = llm.invoke(prompt_final)
                     st.markdown(response.content)
 else:
-    st.info("👋 Sube tus archivos PDF para comenzar.")
+    st.info("Sube tus archivos PDF para comenzar.")
