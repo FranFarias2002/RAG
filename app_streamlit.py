@@ -70,12 +70,16 @@ if uploaded_files:
                 st.error("Falta configurar la GROQ_API_KEY en los secretos.")
             else:
                 with st.spinner("Consultando normativas..."):
-                    # 1. Búsqueda de Similitud: Buscamos los 4 fragmentos más parecidos a la pregunta
+                    # 1. Búsqueda de Similitud: Buscamos los k fragmentos más parecidos a la pregunta
+                    #vector_db ya tiene el modelo de embeddings cargado, así que solo 
+                    #le pasamos el texto de la pregunta, hace el embedding de la pregunta
+                    #compara usando la similitud coseno con los embeddings de los fragmentos,
+                    #los rankea y devuelve los más similares 
                     docs_relacionados = vector_db.similarity_search(prompt, k=4)
-                    
-                    # Unimos los fragmentos en un solo texto indicando el número de página original
+                    #la recuperacion es en texto plano, no devuelve los vectores
+                    #Unimos los fragmentos en un solo texto indicando el número de página original
                     contexto_pdf = "\n\n".join([f"[Pág {d.metadata.get('page', 0)+1}] {d.page_content}" for d in docs_relacionados])
-                    
+                    #Por defecto, el PyPDFLoader siempre guarda {"source": "ruta/al/archivo.pdf", "page": número_de_página}
                     # 2. Configuración del LLM (Llama 3.1) con temperatura baja para evitar alucinaciones
                     llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.1)
                     
