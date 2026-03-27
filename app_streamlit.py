@@ -25,7 +25,7 @@ st.title("Asistente de Metodología y Normativa")
 # --- SIDEBAR: DOCUMENTOS ---
 with st.sidebar:
     st.header("Configuración de Acceso")
-    api_key_imput = st.text_imput("Introducir API Key", type="password")
+    api_key_imput = st.text_input("Introducir API Key", type="password")
 
     st.divider()
 
