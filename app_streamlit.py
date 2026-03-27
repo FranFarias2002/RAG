@@ -2,29 +2,37 @@ import streamlit as st  # Interfaz web
 from langchain_groq import ChatGroq  # Conector para el modelo de lenguaje (LLM) de Groq
 from langchain_community.document_loaders import PyPDFLoader  # Cargador de archivos PDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter  # Divisor de texto inteligente
-from langchain_huggingface import HuggingFaceEmbeddings  # Generador de vectores numéricos para el texto
-from langchain_chroma import Chroma  # Base de datos vectorial para almacenar los fragmentos
-import tempfile  # Para manejar archivos temporales de forma segura
-import os  # Para operaciones del sistema como eliminar archivos
+from langchain_huggingface import HuggingFaceEmbeddings  # Generador de vectores numéricos
+from langchain_chroma import Chroma  # Base de datos vectorial
+import tempfile  # Para manejar archivos temporales
+import os  # Para operaciones del sistema
+
+# ==========================================================
+# --- CONFIGURACIÓN CENTRALIZADA (HIPERPARÁMETROS) ---
+# ==========================================================
+MODELO_LLM = "llama-3.1-8b-instant"
+TEMPERATURA = 0.1
+MODELO_EMBEDDINGS = "sentence-transformers/all-MiniLM-L6-v2"
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 100
+TOP_K_DOCS = 4
+# ==========================================================
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-# Seteamos el título de la pestaña, el icono y el ancho de la pantalla
 st.set_page_config(page_title="RAG Metodología FCyT", layout="wide", page_icon="📚")
-
 st.title("Asistente de Metodología y Normativa")
 
-# --- SIDEBAR: CONFIGURACIÓN ---
+# --- SIDEBAR: DOCUMENTOS ---
 with st.sidebar:
-    # Intentamos obtener la API Key desde el archivo secrets de Streamlit
-    groq_key = st.secrets.get("GROQ_API_KEY", "")
-    
+    st.header("Configuración de Acceso")
+    api_key_imput = st.text_imput("Introducir API Key", type="password")
+
     st.divider()
+
     st.header("Documentos de Cátedra")
-    # Componente para subir archivos (permite varios PDFs a la vez)
     uploaded_files = st.file_uploader("Sube los reglamentos o guías (PDF)", accept_multiple_files=True, type="pdf")
 
-# --- FUNCIÓN DE PROCESAMIENTO (CORE DEL RAG) ---
-# @st.cache_resource evita que se procesen los PDFs de nuevo si los archivos no cambian
+# --- FUNCIÓN DE PROCESAMIENTO ---
 @st.cache_resource
 def crear_base(files):
     if not files:
@@ -33,57 +41,52 @@ def crear_base(files):
     with st.spinner("Procesando y analizando documentos..."):
         all_chunks = []
         for file in files:
-            # Creamos un archivo temporal porque PyPDFLoader necesita una ruta de archivo en disco
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(file.getvalue())
                 loader = PyPDFLoader(tmp.name)
-                docs = loader.load() # Extrae el texto del PDF
+                docs = loader.load() 
                 
-                # Dividimos el texto en trozos (chunks) para que el LLM pueda procesarlos mejor
-                # 1000 caracteres por trozo con un solapamiento de 100 para no perder contexto entre cortes
-                splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+                # Usamos las variables centralizadas para el splitting
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=CHUNK_SIZE, 
+                    chunk_overlap=CHUNK_OVERLAP
+                )
                 chunks = splitter.split_documents(docs)
-                all_chunks.extend(chunks) # Sumamos los trozos de este archivo a la lista total
+                all_chunks.extend(chunks)
                 
-            os.unlink(tmp.name) # Borramos el archivo temporal del disco
+            os.unlink(tmp.name)
         
-        # Cargamos el modelo que convierte texto en vectores (números que representan significado)
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        # Usamos la variable para el modelo de embeddings
+        embeddings = HuggingFaceEmbeddings(model_name=MODELO_EMBEDDINGS)
         
-        # Creamos la base de datos vectorial en memoria usando los trozos de texto y el modelo de embeddings
         vector_db = Chroma.from_documents(documents=all_chunks, embedding=embeddings)
         return vector_db
 
 # --- FLUJO PRINCIPAL ---
 if uploaded_files:
-    # Llamamos a la función de procesamiento
-    vector_db = crear_base(uploaded_files)
+    if not api_key_imput:
+        st.warning("Introduce tu API Key")
+    else:
+        vector_db = crear_base(uploaded_files)
     
-    # Campo de entrada de texto para la pregunta del usuario
-    if prompt := st.chat_input("Ej: ¿Cómo se citan resoluciones internas?"):
-        # Mostramos la pregunta del usuario en la interfaz
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        if prompt := st.chat_input("Ej: ¿Cómo se citan resoluciones internas?"):
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            if not groq_key:
-                st.error("Falta configurar la GROQ_API_KEY en los secretos.")
-            else:
+            with st.chat_message("assistant"):
                 with st.spinner("Consultando normativas..."):
-                    # 1. Búsqueda de Similitud: Buscamos los k fragmentos más parecidos a la pregunta
-                    #vector_db ya tiene el modelo de embeddings cargado, así que solo 
-                    #le pasamos el texto de la pregunta, hace el embedding de la pregunta
-                    #compara usando la similitud coseno con los embeddings de los fragmentos,
-                    #los rankea y devuelve los más similares 
-                    docs_relacionados = vector_db.similarity_search(prompt, k=4)
-                    #la recuperacion es en texto plano, no devuelve los vectores
-                    #Unimos los fragmentos en un solo texto indicando el número de página original
-                    contexto_pdf = "\n\n".join([f"[Pág {d.metadata.get('page', 0)+1}] {d.page_content}" for d in docs_relacionados])
-                    #Por defecto, el PyPDFLoader siempre guarda {"source": "ruta/al/archivo.pdf", "page": número_de_página}
-                    # 2. Configuración del LLM (Llama 3.1) con temperatura baja para evitar alucinaciones
-                    llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_key, temperature=0.1)
+                    # Usamos TOP_K_DOCS para la búsqueda
+                    docs_relacionados = vector_db.similarity_search(prompt, k=TOP_K_DOCS)
                     
-                    # Creamos el "System Prompt" que obliga al modelo a usar solo el contexto del PDF
+                    contexto_pdf = "\n\n".join([f"[Pág {d.metadata.get('page', 0)+1}] {d.page_content}" for d in docs_relacionados])
+                    
+                    # Usamos las variables para el LLM
+                    llm = ChatGroq(
+                        model_name=MODELO_LLM, 
+                        groq_api_key=api_key_imput, 
+                        temperature=TEMPERATURA
+                    )
+                    
                     prompt_final = f"""
                     Eres un asistente académico experto en la normativa de la facultad. 
                     Responde de forma concisa y profesional usando solo el CONTEXTO proporcionado.
@@ -95,9 +98,7 @@ if uploaded_files:
                     PREGUNTA DEL ALUMNO: {prompt}
                     """
                     
-                    # Enviamos todo al modelo y mostramos la respuesta final
                     response = llm.invoke(prompt_final)
                     st.markdown(response.content)
 else:
-    # Mensaje inicial cuando no hay archivos
     st.info("Para comenzar, subí los reglamentos o apuntes en formato PDF en el panel lateral.")
