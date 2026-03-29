@@ -92,7 +92,7 @@ if vector_db:
                 
                 llm = ChatGroq(model_name=MODELO_LLM, groq_api_key=api_key_input, temperature=TEMPERATURA)
                 
-                prompt_final = f"Responde usando este CONTEXTO:\n{contexto_pdf}\n\nPREGUNTA: {prompt}"
+                prompt_final = f"Responde usando SOLO este CONTEXTO:\n{contexto_pdf}\n\nPREGUNTA: {prompt}\nSI LA PREGUNTA NO PUEDE SER RESPONDIDA CON EL CONTEXTO DI NO LO SE"
                 response = llm.invoke(prompt_final)
                 st.markdown(response.content)
 else:
