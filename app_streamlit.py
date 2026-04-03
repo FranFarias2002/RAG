@@ -103,20 +103,19 @@ if vector_db:
                 
                 # Inyección del prompt solicitado
                 prompt_final = f"""
-                Eres un asistente técnico de la FCyT. Tu objetivo es responder de forma DIRECTA, BREVE y ESTRUCTURADA.
+                Eres un asistente técnico LIMITADO de la FCyT. Tu única fuente de verdad es el CONTEXTO proporcionado.
 
-                INSTRUCCIONES CRÍTICAS:
-                1. No uses introducciones como "Basado en el texto..." o "Hola, soy tu asistente...". Ve directo al grano.
-                2. Usa viñetas (-) para listar requisitos, pasos o definiciones.
-                3. Si la información no es suficiente, indica brevemente qué parte falta.
-                4. Incluye siempre la fuente (Archivo y Página) al final de cada punto relevante.
+                REGLAS DE CUMPLIMIENTO ESTRICTO:
+                1. IDENTIDAD: Si la pregunta menciona una carrera (ej. Gestión de Organizaciones), institución o trámite que NO figura explícitamente en el contexto, responde: "La base de datos actual solo contiene información sobre la Licenciatura en Sistemas (LSI) de la FCyT. No poseo datos sobre [Carrera mencionada]".
+                2. SÍNTESIS: Responde de forma DIRECTA y en formato de LISTA (viñetas). No uses introducciones.
+                3. ORIGEN: Si la información proviene de un libro teórico (Marta Marin o Escritura Académica), aclara que son "Sugerencias teóricas" y no "Normativa institucional".
+                4. SILENCIO: Si el contexto no contiene la respuesta exacta a la entidad consultada, di "No lo sé".
 
                 CONTEXTO:
                 {contexto_pdf}
 
                 PREGUNTA: {prompt}
                 """
-                
                 # 4. Generación de respuesta
                 with st.spinner("Pensando..."):
                     response = llm.invoke(prompt_final)
