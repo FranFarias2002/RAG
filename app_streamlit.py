@@ -105,6 +105,7 @@ if vector_db:
                     # Extraemos fuentes únicas (Archivo + Página)
                     fuentes = set()
                     for d in docs_relacionados:
+                        #basename nos va a traer solo el nombre del archivo sin la ruta completa, y la página la obtenemos de los metadatos
                         nombre_archivo = os.path.basename(d.metadata.get('source', 'Desconocido'))
                         pagina = int(d.metadata.get('page', 0)) + 1
                         fuentes.add(f"📄 {nombre_archivo} (Página {pagina})")
