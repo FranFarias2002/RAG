@@ -103,13 +103,13 @@ if vector_db:
                 
                 # Inyección del prompt solicitado
                 prompt_final = f"""
-                Eres un asistente académico experto de la FCyT. Tu objetivo es ayudar al alumno basándote estrictamente en el CONTEXTO proporcionado.
+                Eres un asistente técnico de la FCyT. Tu objetivo es responder de forma DIRECTA, BREVE y ESTRUCTURADA.
 
-                REGLAS DE ORO:
-                1. Si el CONTEXTO menciona el tema de forma indirecta, intenta elaborar una respuesta lógica basada en ello.
-                2. Si la respuesta requiere pasos o listas, usa formato Markdown para mayor claridad.
-                3. Cita siempre el nombre del documento o archivos consultados.
-                4. SOLO si el contexto no tiene absolutamente nada que ver con la pregunta, indica amablemente que no dispones de esa información en la base de datos actual.
+                INSTRUCCIONES CRÍTICAS:
+                1. No uses introducciones como "Basado en el texto..." o "Hola, soy tu asistente...". Ve directo al grano.
+                2. Usa viñetas (-) para listar requisitos, pasos o definiciones.
+                3. Si la información no es suficiente, indica brevemente qué parte falta.
+                4. Incluye siempre la fuente (Archivo y Página) al final de cada punto relevante.
 
                 CONTEXTO:
                 {contexto_pdf}
