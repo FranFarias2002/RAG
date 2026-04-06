@@ -6,9 +6,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 import os
 
-# CONFIGURACIÓN DE HIPERPARÁMETROS 
+# 1. CONFIGURACIÓN DE HIPERPARÁMETROS 
 MODELO_LLM = "llama-3.1-8b-instant"
-TEMPERATURA = 0.1
+TEMPERATURA = 0.1 # Baja temperatura para evitar alucinaciones
 MODELO_EMBEDDINGS = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 120
@@ -20,35 +20,50 @@ CARPETA_DB = "db_data"
 st.set_page_config(page_title="RAG Metodología FCyT", layout="wide", page_icon="📚")
 st.title("Asistente de Metodología y Normativa")
 
-# Lógica de carpetas inicial
+# Verificación inicial: Crea la carpeta de origen si no existe
 if not os.path.exists(CARPETA_DATA):
     os.makedirs(CARPETA_DATA)
 
-# Función de procesamiento con persistencia
-@st.cache_resource
+# 2. PROCESAMIENTO DE DOCUMENTOS (ETAPAS 1 A 5 DEL PIPELINE)
+
+@st.cache_resource # Evita reprocesar todo al interactuar con la UI
 def obtener_o_crear_base():
+    # PIPELINE ETAPA 4: Embeddings
+    # Convierte texto en vectores matemáticos usando el modelo multilingüe
     embeddings = HuggingFaceEmbeddings(model_name=MODELO_EMBEDDINGS)
     
-    # Intenta cargar base existente
+    # Intenta cargar base existente para ahorrar cómputo y tiempo
     if os.path.exists(CARPETA_DB) and len(os.listdir(CARPETA_DB)) > 0:
         return Chroma(persist_directory=CARPETA_DB, embedding_function=embeddings)
     
-    # Si no hay base, procesa los PDFs
+    # Si no hay base, procesa los PDFs de la carpeta data
     archivos_pdf = [f for f in os.listdir(CARPETA_DATA) if f.endswith('.pdf')]
     if not archivos_pdf:
-        return None
+        return None# Si no hay PDFs, no se puede crear la base
         
     all_chunks = []
     for nombre_archivo in archivos_pdf:
+
+        # PIPELINE ETAPA 1 y 2: Carga y Limpieza
+
+        # PyPDFLoader extrae el texto digital ignorando elementos no textuales
         loader = PyPDFLoader(os.path.join(CARPETA_DATA, nombre_archivo))
-        docs = loader.load()
+        docs = loader.load() # Cada página se convierte en un documento separado con metadatos de origen
+
+        # PIPELINE ETAPA 3: Fragmentación (Chunking)
+
+        # Divide el PDF en pedazos procesables respetando el solapamiento
         chunks = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE, 
             chunk_overlap=CHUNK_OVERLAP
         ).split_documents(docs)
-        all_chunks.extend(chunks)
+        all_chunks.extend(chunks)# Acumula todos los fragmentos de todos los PDFs para luego vectorizarlos juntos
     
     if all_chunks:
+
+        # PIPELINE ETAPA 5: Almacenamiento Vectorial
+        
+        # Crea y guarda la base de datos física en el disco (db_data)
         vector_db = Chroma.from_documents(
             documents=all_chunks, 
             embedding=embeddings,
@@ -57,12 +72,15 @@ def obtener_o_crear_base():
         return vector_db
     return None
 
+
+# 3. INTERFAZ Y MANTENIMIENTO
 # Barra lateral para configuración y mantenimiento
 with st.sidebar:
     st.header("Configuración")
     api_key_input = st.text_input("Introducir API Key", type="password")
     
     st.divider()
+    # Lógica de limpieza: Borra la DB física para forzar un nuevo escaneo de PDFs
     if st.button("Re-indexar documentos"):
         if os.path.exists(CARPETA_DB):
             import shutil
@@ -70,34 +88,40 @@ with st.sidebar:
         st.rerun()
 
 # flujo principal
+# Carga la base de datos (si existe) o la crea (si hay PDFs nuevos)
 vector_db = obtener_o_crear_base()
 
-if vector_db:
+# 4. FLUJO DE CONSULTA (ETAPAS 6 Y 7 DEL PIPELINE)
+
+if vector_db:# Solo muestra el chat si la base de datos está lista (es decir, hay PDFs procesados)
     if prompt := st.chat_input("Consulta sobre el reglamento o la teoría..."):
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(prompt)# Muestra la pregunta del usuario en el formato de chat
 
         with st.chat_message("assistant"):
             if not api_key_input:
                 st.error("Ingresa la API Key en el panel lateral.")
             else:
-                # 1. Recuperación de fragmentos (Retrieval)
+                # PIPELINE ETAPA 6: Recuperación (Retrieval)
+                # Busca los 7 fragmentos más parecidos vectorialmente a la pregunta
                 docs_relacionados = vector_db.similarity_search(prompt, k=TOP_K_DOCS)
                 
-                # 2. Construcción del contexto enriquecido
+                # PIPELINE ETAPA 7: Construcción del Contexto
+                # Construcción del contexto plano con metadatos para el LLM
                 contexto_pdf = "\n\n".join([
                     f"[Archivo: {os.path.basename(d.metadata.get('source'))} - Pág: {int(d.metadata.get('page', 0))+1}] {d.page_content}" 
                     for d in docs_relacionados
                 ])
                 
-                # 3. Preparación del LLM y el Prompt Maestro
+                # PIPELINE ETAPA 8: Generación de Respuesta
+                # Configuración del motor de inferencia (LLM)
                 llm = ChatGroq(
                     model_name=MODELO_LLM, 
                     groq_api_key=api_key_input, 
                     temperature=TEMPERATURA
                 )
                 
-                # Inyección del prompt solicitado
+                # Definición del Prompt Maestro con reglas de seguridad anti-alucinación
                 prompt_final = f"""
                 Eres un asistente técnico LIMITADO de la FCyT. Tu única fuente de verdad es el CONTEXTO proporcionado.
 
@@ -112,12 +136,14 @@ if vector_db:
 
                 PREGUNTA: {prompt}
                 """
-                # 4. Generación de respuesta
+                # Generación de respuesta
+                # Ejecución de la llamada al modelo
                 with st.spinner("Pensando..."):
-                    response = llm.invoke(prompt_final)
-                    st.markdown(response.content)
+                    response = llm.invoke(prompt_final)# Obtiene la respuesta generada por el LLM basada en el contexto construido
+                    st.markdown(response.content)# Muestra la respuesta generada por el LLM en el formato de chat
                 
-                # 5. Desplegable de fuentes para validación académica
+                # PIPELINE ETAPA 9: Validación Académica
+                # Desplegable de fuentes consultadas para transparencia y validación por parte del usuario
                 with st.expander("Ver fuentes consultadas"):
                     fuentes = set()
                     for d in docs_relacionados:
